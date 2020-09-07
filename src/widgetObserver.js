@@ -54,12 +54,13 @@ export default class WidgetObserver {
     this.currentBreakpoint = getCurrentBreakpoint(breakpoints);
 
     /*
-      Объект с событиями, которые необходимо отправить или уже отправлены.
+      Объект с событиями, которые необходимо отправить (значение false)
+      или уже отправлены (значение true).
 
       Имеет вид:
       events = {
-        key1: type: 'w_show', widgetId: 'widget_id',
-        key2: type: 'i_show', itemId: 'item_id',
+        'widget_id__w_show': false,
+        'item_id__i_show': false,
       };
     */
     this.events = null;
@@ -67,6 +68,7 @@ export default class WidgetObserver {
     // leading: false позволяет отменить первый моментальный вызов переданной функции
     this.sendEventsThrottled = throttle(this.sendEvents.bind(this), 2000, { leading: false });
     this.handleResize = throttle(this.handleResize.bind(this), 500, { leading: false });
+    this.handleClick = this.handleClick.bind(this);
   }
 
   // массив рекомендаций, который нужно отправить
@@ -111,6 +113,8 @@ export default class WidgetObserver {
 
     this.addResizeObserver();
     this.addIntersectionObserver();
+
+    this.widgetListElement.addEventListener('click', this.handleClick);
   }
 
   addResizeObserver() {
@@ -180,10 +184,8 @@ export default class WidgetObserver {
           logInfo('the event "i_show" for this element already exists in the object "events". Calling unobserve');
           logGroupEnd();
 
-          if (this.intersectionObserver) {
-            this.intersectionObserver.unobserve(entry.target);
-            return;
-          }
+          this.intersectionObserver.unobserve(entry.target);
+          return;
         }
 
         // Добавляем новое событие показа рекомендации на отправку
@@ -191,11 +193,7 @@ export default class WidgetObserver {
         logInfo('add an event "i_show" to the object "events" and call unobserve for this element');
         logGroupEnd();
         this.events = { ...this.events, [iShowKey]: false };
-
-        if (this.intersectionObserver) {
-          this.intersectionObserver.unobserve(entry.target);
-          return;
-        }
+        this.intersectionObserver.unobserve(entry.target);
 
         // Если есть неотправленные события,
         // то вызываем метод их отправки не чаще, чем раз в 2 секунды
@@ -244,6 +242,24 @@ export default class WidgetObserver {
     // На случай, если ресайз произошел сразу или еще не все события отправлены
     this.removeIntersectionObserver();
     this.addIntersectionObserver();
+  }
+
+  handleClick({ target }) {
+    if (!target) return;
+
+    // TODO: Для IE11 нужен полифилл для метода .closest
+    const targetElementClosest = target.closest('[data-item-id]');
+    if (!targetElementClosest) return;
+
+    const dataItemId = targetElementClosest.getAttribute('data-item-id');
+    if (dataItemId) this.sendClickEvent(dataItemId);
+  }
+
+  sendClickEvent(itemId) {
+    const iClickKey = getEventKey(itemId, 'i_click');
+    this.events = { ...this.events, [iClickKey]: false };
+
+    this.sendEvents();
   }
 
   sendEvents() {
@@ -321,6 +337,7 @@ export default class WidgetObserver {
   }
 
   destroy() {
+    // Проверяем наличие неотправленных событий и отправляем их без задержки
     logInfo('call destroy');
     if (this.events && this.eventsForSend.length) this.sendEvents();
 
@@ -328,6 +345,8 @@ export default class WidgetObserver {
     this.currentBreakpoint = null;
     this.widgetListElement = null;
     this.widgetListItemsElements = null;
+
+    window.removeEventListener('click', this.handleClick);
 
     this.removeIntersectionObserver();
     this.removeResizeObserver();

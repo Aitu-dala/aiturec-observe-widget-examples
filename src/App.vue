@@ -63,7 +63,12 @@
           :key="item.item_id"
           class="widget__item"
         >
-          <a href="/" class="widget__recommendation" :data-item-id="item.item_id">
+          <a
+            href="/"
+            class="widget__recommendation"
+            :data-item-id="item.item_id"
+            onclick="return false;"
+          >
             <span
               class="widget__recommendation-image"
               :style="{ backgroundImage: `url(${item.image_url})` }"
