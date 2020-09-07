@@ -29,13 +29,15 @@
 */
 import throttle from 'lodash/throttle';
 
-import getCurrentBreakpoint from './helpers/getCurrentBreakpoint';
+import getEventKey from '@/helpers/getEventKey';
+import getCurrentBreakpoint from '@/helpers/getCurrentBreakpoint';
 import {
   logInfo,
   logError,
   logGroup,
   logGroupEnd,
 } from './helpers/logger';
+
 
 export default class WidgetObserver {
   constructor({ items, widgetId, breakpoints }) {
@@ -48,6 +50,7 @@ export default class WidgetObserver {
     this.widgetListItemsElements = this.widgetListElement.querySelectorAll('a');
 
     this.intersectionObserver = null;
+    this.intersectionObserverElements = undefined;
     this.currentBreakpoint = getCurrentBreakpoint(breakpoints);
 
     /*
@@ -55,8 +58,8 @@ export default class WidgetObserver {
 
       Имеет вид:
       events = {
-        key1: type: 'w_show', widgetId: 'widget_id', isSended: true,
-        key2: type: 'i_show', itemId: 'item_id', isSended: false,
+        key1: type: 'w_show', widgetId: 'widget_id', isSent: true,
+        key2: type: 'i_show', itemId: 'item_id', isSent: false,
       };
     */
     this.events = null;
@@ -73,16 +76,16 @@ export default class WidgetObserver {
     return Object
       .keys(this.events)
       .map(key => this.events && this.events[key])
-      .filter(item => !item.isSended);
+      .filter(item => !item.isSent);
   }
 
-  // подсчитываем все события с флагом isSended: true
-  get eventsSendedCount() {
+  // подсчитываем все события с флагом isSent: true
+  get eventsSentCount() {
     if (!this.events) return 0;
     return Object
       .keys(this.events)
       .map(key => this.events && this.events[key])
-      .filter(item => item.isSended)
+      .filter(item => item.isSent)
       .length;
   }
 
@@ -158,12 +161,11 @@ export default class WidgetObserver {
           return;
         }
 
-        if (!this.events || !this.events[this.widgetId]) {
-          // Добавляем событие показа виджета, если элемент со списком показался во viewport
-          this.events = {
-            ...this.events,
-            [this.widgetId]: { type: 'w_show', widgetId: this.widgetId, isSended: false },
-          };
+        const wShowKey = getEventKey(this.widgetId, 'w_show');
+
+        // Добавляем событие показа виджета, если элемент со списком показался во viewport
+        if (!this.events || !this.events[wShowKey]) {
+          this.events = { ...this.events, [wShowKey]: false };
         }
 
         const itemId = entry.target.getAttribute('data-item-id');
@@ -172,24 +174,30 @@ export default class WidgetObserver {
           return;
         }
 
+        const iShowKey = getEventKey(itemId, 'i_show');
+
         // Если это событие уже есть в объекте events (например после смены брейкпоинта),
         // то можно сразу удалить наблюдатель
-        if (this.events && this.events[itemId] && this.intersectionObserver) {
+        if (this.events && this.events[iShowKey] && this.intersectionObserver) {
           logInfo('the event "i_show" for this element already exists in the object "events". Calling unobserve');
           logGroupEnd();
-          if (this.intersectionObserver) this.intersectionObserver.unobserve(entry.target);
-          return;
+
+          if (this.intersectionObserver) {
+            this.intersectionObserver.unobserve(entry.target);
+            return;
+          }
         }
 
         // Добавляем новое событие показа рекомендации на отправку
         // и снимаем с элемента наблюдатель
-        this.events = {
-          ...this.events,
-          [itemId]: { type: 'i_show', itemId, isSended: false },
-        };
-        if (this.intersectionObserver) this.intersectionObserver.unobserve(entry.target);
         logInfo('add an event "i_show" to the object "events" and call unobserve for this element');
         logGroupEnd();
+        this.events = { ...this.events, [iShowKey]: false };
+
+        if (this.intersectionObserver) {
+          this.intersectionObserver.unobserve(entry.target);
+          return;
+        }
 
         // Если есть неотправленные события,
         // то вызываем метод их отправки не чаще, чем раз в 2 секунды
@@ -230,7 +238,7 @@ export default class WidgetObserver {
     if (JSON.stringify(newBreakpoint) === JSON.stringify(this.currentBreakpoint)) return;
     // Если кол-во рекомендаций у нового брейкпоинта меньше, чем было уже отправлено,
     // то ничего не делаем
-    if (newBreakpoint.rowsCount * newBreakpoint.columnsCount <= this.eventsSendedCount) return;
+    if (newBreakpoint.rowsCount * newBreakpoint.columnsCount <= this.eventsSentCount) return;
 
     logInfo('newCurrentBreakpoint', newBreakpoint);
     this.currentBreakpoint = newBreakpoint;
@@ -243,11 +251,13 @@ export default class WidgetObserver {
   sendEvents() {
     logGroup('call sendEvents');
     // Убираем из массива неотправленных событий лишние данные
-    const events = this.eventsForSend.map(eventForSend => ({
-      type: eventForSend.type,
+    const events = this.eventsForSend.map((eventForSend) => {
+      const [id, type] = eventForSend.split('__');
+
       // Для события `i_show` требуется передать itemId
-      ...(eventForSend.itemId && { itemId: eventForSend.itemId }),
-    }));
+      if (type === 'w_show') return { type };
+      return { type, itemId: id };
+    });
     /*
       И отправляем их
 
@@ -258,25 +268,22 @@ export default class WidgetObserver {
     */
     logInfo('events for send', events);
 
-    // После этого нужно пометить отправленные события флагом isSended со значением true
-    const senededEvents = this.eventsForSend.reduce((sum, current) => ({
+    // После этого нужно пометить отправленные события флагом isSent со значением true
+    const sentEvents = this.eventsForSend.reduce((sum, current) => ({
       ...sum,
-      [current.itemId || current.widgetId]: {
-        ...current,
-        isSended: true,
-      },
+      [current]: true,
     }), this.events);
 
     this.events = {
       ...this.events,
-      ...senededEvents,
+      ...sentEvents,
     };
 
     logInfo('events object', this.events);
 
     // Если отправлены события для всех рекомендаций и событие показа виджета,
     // то нужно снять все наблюдатели
-    if (this.eventsSendedCount === this.items.length + 1) {
+    if (this.eventsSentCount === this.items.length + 1) {
       logInfo('all events for all breakpoints sent');
       this.removeIntersectionObserver();
       this.removeResizeObserver();
@@ -286,7 +293,7 @@ export default class WidgetObserver {
 
     // Если отправлены все возможные события для текущего брейкпоинта,
     // то нужно снять наблюдение с рекомендаций
-    if (this.eventsSendedCount === this.itemsCountForCurrentBreakpoint + 1) {
+    if (this.eventsSentCount === this.itemsCountForCurrentBreakpoint + 1) {
       logInfo('all events for current breakpoint sent');
       this.removeIntersectionObserver();
     }
