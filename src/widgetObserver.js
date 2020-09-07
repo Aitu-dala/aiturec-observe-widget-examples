@@ -65,7 +65,7 @@ export default class WidgetObserver {
     this.events = null;
 
     // leading: false позволяет отменить первый моментальный вызов переданной функции
-    this.sendEvents = throttle(this.sendEvents.bind(this), 2000, { leading: false });
+    this.sendEventsThrottled = throttle(this.sendEvents.bind(this), 2000, { leading: false });
     this.handleResize = throttle(this.handleResize.bind(this), 500, { leading: false });
   }
 
@@ -75,8 +75,7 @@ export default class WidgetObserver {
 
     return Object
       .keys(this.events)
-      .map(key => this.events && this.events[key])
-      .filter(item => !item.isSent);
+      .filter(key => !this.events[key]);
   }
 
   // подсчитываем все события с флагом isSent: true
@@ -84,8 +83,7 @@ export default class WidgetObserver {
     if (!this.events) return 0;
     return Object
       .keys(this.events)
-      .map(key => this.events && this.events[key])
-      .filter(item => item.isSent)
+      .filter(key => this.events[key])
       .length;
   }
 
@@ -201,7 +199,7 @@ export default class WidgetObserver {
 
         // Если есть неотправленные события,
         // то вызываем метод их отправки не чаще, чем раз в 2 секунды
-        if (this.eventsForSend.length) this.sendEvents();
+        if (this.eventsForSend.length) this.sendEventsThrottled();
       });
     };
 
@@ -258,6 +256,7 @@ export default class WidgetObserver {
       if (type === 'w_show') return { type };
       return { type, itemId: id };
     });
+
     /*
       И отправляем их
 
@@ -323,6 +322,7 @@ export default class WidgetObserver {
 
   destroy() {
     logInfo('call destroy');
+    if (this.events && this.eventsForSend.length) this.sendEvents();
 
     this.events = null;
     this.currentBreakpoint = null;
