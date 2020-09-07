@@ -58,8 +58,8 @@ export default class WidgetObserver {
 
       Имеет вид:
       events = {
-        key1: type: 'w_show', widgetId: 'widget_id', isSent: true,
-        key2: type: 'i_show', itemId: 'item_id', isSent: false,
+        key1: type: 'w_show', widgetId: 'widget_id',
+        key2: type: 'i_show', itemId: 'item_id',
       };
     */
     this.events = null;
@@ -78,7 +78,7 @@ export default class WidgetObserver {
       .filter(key => !this.events[key]);
   }
 
-  // подсчитываем все события с флагом isSent: true
+  // подсчитываем все события со значением true
   get eventsSentCount() {
     if (!this.events) return 0;
     return Object
@@ -267,7 +267,7 @@ export default class WidgetObserver {
     */
     logInfo('events for send', events);
 
-    // После этого нужно пометить отправленные события флагом isSent со значением true
+    // После этого нужно пометить отправленные события со значением true
     const sentEvents = this.eventsForSend.reduce((sum, current) => ({
       ...sum,
       [current]: true,
