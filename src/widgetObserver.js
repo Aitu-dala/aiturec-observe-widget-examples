@@ -245,6 +245,7 @@ export default class WidgetObserver {
   }
 
   handleClick({ target }) {
+    logGroup('call handleClick');
     if (!target) return;
 
     // TODO: Для IE11 нужен полифилл для метода .closest
@@ -252,13 +253,21 @@ export default class WidgetObserver {
     if (!targetElementClosest) return;
 
     const dataItemId = targetElementClosest.getAttribute('data-item-id');
-    if (dataItemId) this.sendClickEvent(dataItemId);
+    if (dataItemId) {
+      logInfo('call sendClickEvent', dataItemId);
+      logGroupEnd();
+
+      this.sendClickEvent(dataItemId);
+    }
   }
 
   sendClickEvent(itemId) {
+    logGroup('call sendClickEvent');
     const iClickKey = getEventKey(itemId, 'i_click');
     this.events = { ...this.events, [iClickKey]: false };
 
+    logInfo('events for click', this.events);
+    logGroupEnd();
     this.sendEvents();
   }
 
