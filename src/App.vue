@@ -25,10 +25,10 @@
       </li>
       <li>
         При срабатывании коллбека наблюдателя рекомендации, добавляется новое событие на отправку
-        с флагом isSended и значением false, а сам наблюдатель с рекомендации снимается
+        co значением false, а сам наблюдатель с рекомендации снимается
       </li>
       <li>Метод отправки событий вызывается с троттлингом в 2 секунды</li>
-      <li>У отправленных событий флагу isSended выставляется значение true</li>
+      <li>У отправленных событий выставляется значение true</li>
       <li>
         Если отправлены все события для текущего брейкпоинта,
         то снимаются наблюдатели со всех рекомендаций
@@ -63,7 +63,12 @@
           :key="item.item_id"
           class="widget__item"
         >
-          <a href="/" class="widget__recommendation" :data-item-id="item.item_id">
+          <a
+            href="/"
+            class="widget__recommendation"
+            :data-item-id="item.item_id"
+            onclick="return false;"
+          >
             <span
               class="widget__recommendation-image"
               :style="{ backgroundImage: `url(${item.image_url})` }"
